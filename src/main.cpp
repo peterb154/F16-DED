@@ -17,12 +17,20 @@
 #include <SPI.h>
 #include <Wire.h>
 
+// file:///C:/Users/brian/Projects/dcs/dcs-bios/Scripts/DCS-BIOS/doc/control-reference.html
+#define F_16C_50_DED_LINE_1_A 0x450a
+#define F_16C_50_DED_LINE_2_A 0x4528
+#define F_16C_50_DED_LINE_3_A 0x4546
+#define F_16C_50_DED_LINE_4_A 0x4564
+#define F_16C_50_DED_LINE_5_A 0x4582
+
 // U8G2_R2 rotates 180deg - https://github.com/olikraus/u8g2/wiki/u8g2setupcpp#rotation
 // (rotation, cs, dc [, reset]) [full framebuffer, size = 512 bytes]
 U8G2_SSD1322_NHD_256X64_F_4W_HW_SPI u8g2(U8G2_R2, V_SPI_CS0, SPI_DC, SPI_RESET);
 
 // define the correct gemoetry for rows based on font
 #define DED_FONT u8g2_font_9x15_m_symbols // w=9, h=15, A=10
+const int DED_LINE_LEN = 25;
 const uint8_t textWidth = 9;              // 256px / 26 chars = 9.8px
 const uint8_t textHeight = 15;            // 64px / 5 lines = 12.8px
 const uint8_t rowHeight = 12;             // using 12 to cram letters closer vertically
@@ -49,7 +57,7 @@ char *line5 = (char *)"";
 void replaceChar(uint8_t row, int index, uint16_t newGlyph)
 {
   u8g2.setDrawColor(0);                                                  // color to blank
-  u8g2.drawBox(textWidth * index, row - textHeight, textWidth, row + 1); // create a box around the old char
+  u8g2.drawBox(textWidth * index, row - textHeight, textWidth, row + 4); // create a box around the old char
   u8g2.setDrawColor(1);                                                  // set the color back to on
 #ifndef DCSBIOS
   Serial.println("REPLACED - row:" + String(row) + ", index:" + String(index) + " newGlyph:" + newGlyph);
@@ -86,57 +94,34 @@ void highlightChar(uint8_t row, int index, char hChar)
  **/
 void drawDedLine(uint8_t row, const char dedLine[])
 {
-  // Process the dedLine and draw the first 25 characters on the screen in the correct row
-  char firstTwentySix[26]; // char array that contains the string to be printed (before formatting)
-  strncpy(firstTwentySix, dedLine, 26);
-  firstTwentySix[25] = '\0'; // Null-terminate the string
-#ifndef DCSBIOS
-  Serial.println("DRAW - row:" + String(row) + " '" + firstTwentySix + "'");
-#endif
-  u8g2.drawStr(0, row, firstTwentySix);
+  // Extract the first 25 chars from the supplied dedLine char array
+  char dedChars[DED_LINE_LEN]; // new char array that will contain only the string to be printed
+  strncpy(dedChars, dedLine, DED_LINE_LEN); // pull the first 25 chars from dedLine into the dedChars var
+  dedChars[DED_LINE_LEN - 1] = '\0'; // Null-terminate the string
+  u8g2.drawStr(0, row, dedChars);
 
   // Replace any matching characters with the corrected symbols
-  int length = strlen(firstTwentySix);
-  for (int i = 0; i < length; i++)
+  for (int i = 0; i < DED_LINE_LEN; i++)
   {
-    if (firstTwentySix[i] == 'o')
+    if (dedChars[i] == 'o')
     {
       replaceChar(row, i, 0x00B0); // replace "o" with degree symbol
     }
-    else if (firstTwentySix[i] == 'a')
+    else if (dedChars[i] == 'a')
     {
       replaceChar(row, i, 0x21D5); // replace "a" with up/down arrow symbol
     }
-    else if (firstTwentySix[i] == '*')
-    {
-      highlightChar(row, i + 1, '*'); // highlight all "*"
-    }
   }
-
-  // Extract the last 3 characters from the dedLine, these contain the highlight maps
-  char lastThree[3] = "";
-  if (strlen(dedLine) > 26)
-  {
-    strncpy(lastThree, dedLine + 25, 3);
-    lastThree[3] = '\0'; // Null-terminate the string
-  }
-  int lastThreeLen = strlen(lastThree);
 #ifndef DCSBIOS
-  Serial.println("LAST3 - row:" + String(row) + " len:" + lastThreeLen + " '" + String(lastThree) + "'");
+  Serial.println("DRAW - row:" + String(row) + " '" + dedChars + "'");
 #endif
 
-  // Highlight characters in firstTwentySix based on lastThree of the dedLine
-  int index = 1;                         // index is the position in the first 26 chars starting from 1
-  for (int i = 0; i < lastThreeLen; i++) // iterate through each of the control chars
-  {
-    for (int b = 0; b <= 7; b++) // read each bit in the control char
-    {
-      if (bitRead(lastThree[i], b) == 1)
-      {
-        // the bit is 1, highlight that char
-        highlightChar(row, index, firstTwentySix[index - 1]);
-      }
-      index++;
+  // Highlight dedChars (first 25) based on ctrlChars (last 4)
+  unsigned long bitMap;
+  memcpy(&bitMap, &dedLine[DED_LINE_LEN], 4);
+  for (int i = 0; i < DED_LINE_LEN; i++) {
+    if(bitRead(bitMap, i)) {
+      highlightChar(row, i + 1, dedChars[i]);
     }
   }
 }
@@ -211,8 +196,7 @@ void onDedLine1Change(char *newValue)
 {
   line1 = newValue;
 }
-// https://dcs-bios.readthedocs.io/en/latest/code-snippets.html#stringbuffer-and-integerbuffer
-DcsBios::StringBuffer<29> dedLine1Buffer(0x4500, onDedLine1Change);
+DcsBios::StringBuffer<29> dedLine1Buffer(F_16C_50_DED_LINE_1_A, onDedLine1Change);
 
 /**
  * @brief Callback for when new DCS BIOS line2 arrives
@@ -221,7 +205,7 @@ void onDedLine2Change(char *newValue)
 {
   line2 = newValue;
 }
-DcsBios::StringBuffer<29> dedLine2Buffer(0x451e, onDedLine2Change);
+DcsBios::StringBuffer<29> dedLine2Buffer(F_16C_50_DED_LINE_2_A, onDedLine2Change);
 
 /**
  * @brief Callback for when new DCS BIOS line3 arrives
@@ -230,7 +214,7 @@ void onDedLine3Change(char *newValue)
 {
   line3 = newValue;
 }
-DcsBios::StringBuffer<29> dedLine3Buffer(0x453c, onDedLine3Change);
+DcsBios::StringBuffer<29> dedLine3Buffer(F_16C_50_DED_LINE_3_A, onDedLine3Change);
 
 /**
  * @brief Callback for when new DCS BIOS line4 arrives
@@ -239,7 +223,7 @@ void onDedLine4Change(char *newValue)
 {
   line4 = newValue;
 }
-DcsBios::StringBuffer<29> dedLine4Buffer(0x455a, onDedLine4Change);
+DcsBios::StringBuffer<29> dedLine4Buffer(F_16C_50_DED_LINE_4_A, onDedLine4Change);
 
 /**
  * @brief Callback for when new DCS BIOS line5 arrives
@@ -248,7 +232,7 @@ void onDedLine5Change(char *newValue)
 {
   line5 = newValue;
 }
-DcsBios::StringBuffer<29> dedLine5Buffer(0x4578, onDedLine5Change);
+DcsBios::StringBuffer<29> dedLine5Buffer(F_16C_50_DED_LINE_5_A, onDedLine5Change);
 #endif
 
 /**
@@ -279,6 +263,7 @@ void setup()
   DcsBios::setup();
 #else
   Serial.begin(9600);
+  u8g2.enableUTF8Print();
   Serial.println("Setup start");
 #endif
   u8g2.begin();
