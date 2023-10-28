@@ -31,17 +31,11 @@ Code inspiration came from the following repos/threads:
     git clone https://github.com/peterb154/F16-DED.git
     cd F16-DED
     ```
-2. install the dependencies (assumes pio is in your path)
+2. Create/update your wifi settings in [src/secrets.h](src/secrets.h).
+    - See an example in  [src/secrets-example.h](src/secrets-example.h)
+3. build and upload DCS-BIOS WiFi enabled versionto your board 
     ```
-    pio install
-    ```
-3. Build and upload DEBUG environment used for testing (disables DCS-BIOS), then monior serial port
-    ```
-    pio run -e DEBUG -t upload && pio device monitor
-    ```
-4. build and upload DCS-BIOS enbaled versionto your board 
-    ```
-    pio run -e DCSBIOS -t upload
+    pio run -e WIFI -t upload && pio device monitor
     ```
 
 # Hardware
@@ -68,7 +62,10 @@ See [case/](case/) for stl files. Print at normal 20% infill, no supports. Its a
 # Sim configuration
 
 ### DCS Bios
-1. Install DCS-BIOS - https://dcs-bios.readthedocs.io/en/latest/installation.html
-2. Ensure F16C-50 module is enabled in DCS-BIOS - https://dcs-bios.readthedocs.io/en/latest/installation.html#installing-plugins
-3. Connect DCS-BIOS to the serial port created by the DED - https://dcs-bios.readthedocs.io/en/latest/dashboard.html#managing-serial-port-connections
-4. Fly the F16 in DCS and enjoy!
+1. On your DCS machine, Install latest Skunkworks version of DCS-BIOS - https://github.com/DCS-Skunkworks/dcs-bios/releases
+   1. You dont need to so the socat steps, we'll use wifi baby
+2. On your DCS machchine, Install DCS-Nexus mdns router - https://github.com/DCSBIOSKit/DCS-Nexus
+   1. As of 2023-10-28: clone the repo `git clone https://github.com/DCSBIOSKit/DCS-Nexus && cd DCS-Nexus`
+   2. create a virtual environment `python -m venv venv`
+   3. run `venv\Scripts\python Nexus.pyw`
+3. Fly the F16 in DCS and enjoythe DED

@@ -5,19 +5,22 @@
 #define SPI_DC 27    // any GPIO pin will work
 #define SPI_RESET 26 // any GPIO pin will work
 
-// #define DCSBIOS // turns dcs bios on, leave off for serial port monitoring
+#ifdef WIFI
+#include "secrets.h"
+#include <WiFi.h>
+#endif
 
 #ifdef DCSBIOS
-#define DCSBIOS_DEFAULT_SERIAL // Use for STM32/ESP32
 #include "DcsBios.h"
 #endif
+
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <U8glib.h>
 #include <SPI.h>
 #include <Wire.h>
 
-// file:///C:/Users/brian/Projects/dcs/dcs-bios/Scripts/DCS-BIOS/doc/control-reference.html
+// https://github.com/DCS-Skunkworks/dcs-bios/blob/master/Scripts/DCS-BIOS/doc/control-reference.html
 #define F_16C_50_DED_LINE_1_A 0x450a
 #define F_16C_50_DED_LINE_2_A 0x4528
 #define F_16C_50_DED_LINE_3_A 0x4546
@@ -29,8 +32,8 @@
 U8G2_SSD1322_NHD_256X64_F_4W_HW_SPI u8g2(U8G2_R2, V_SPI_CS0, SPI_DC, SPI_RESET);
 
 // define the correct gemoetry for rows based on font
+const int DED_LINE_LEN = 25;              // DED string is 25 chars wide
 #define DED_FONT u8g2_font_9x15_m_symbols // w=9, h=15, A=10
-const int DED_LINE_LEN = 25;
 const uint8_t textWidth = 9;              // 256px / 26 chars = 9.8px
 const uint8_t textHeight = 15;            // 64px / 5 lines = 12.8px
 const uint8_t rowHeight = 12;             // using 12 to cram letters closer vertically
@@ -40,7 +43,7 @@ const uint8_t row3 = rowHeight * 3;
 const uint8_t row4 = rowHeight * 4;
 const uint8_t row5 = rowHeight * 5;
 
-//  initialize empty ded lines
+// initialize empty ded lines
 char *line1 = (char *)"";
 char *line2 = (char *)"";
 char *line3 = (char *)"";
@@ -95,9 +98,9 @@ void highlightChar(uint8_t row, int index, char hChar)
 void drawDedLine(uint8_t row, const char dedLine[])
 {
   // Extract the first 25 chars from the supplied dedLine char array
-  char dedChars[DED_LINE_LEN]; // new char array that will contain only the string to be printed
+  char dedChars[DED_LINE_LEN];              // new char array that will contain only the string to be printed
   strncpy(dedChars, dedLine, DED_LINE_LEN); // pull the first 25 chars from dedLine into the dedChars var
-  dedChars[DED_LINE_LEN - 1] = '\0'; // Null-terminate the string
+  dedChars[DED_LINE_LEN - 1] = '\0';        // Null-terminate the string
   u8g2.drawStr(0, row, dedChars);
 
   // Replace any matching characters with the corrected symbols
@@ -119,73 +122,13 @@ void drawDedLine(uint8_t row, const char dedLine[])
   // Highlight dedChars (first 25) based on ctrlChars (last 4)
   unsigned long bitMap;
   memcpy(&bitMap, &dedLine[DED_LINE_LEN], 4);
-  for (int i = 0; i < DED_LINE_LEN; i++) {
-    if(bitRead(bitMap, i)) {
+  for (int i = 0; i < DED_LINE_LEN; i++)
+  {
+    if (bitRead(bitMap, i))
+    {
       highlightChar(row, i + 1, dedChars[i]);
     }
   }
-}
-
-/**
- * @brief prints test CNI Page of the DED
- */
-void cniPage()
-{
-  u8g2.firstPage();
-  do
-  {
-    drawDedLine(row1, " UHF  305.00  STPT a  1  "); // a is up/dwn arrow
-    drawDedLine(row2, "                         ");
-    drawDedLine(row3, " VHF  127.00   11:53:36  ");
-    drawDedLine(row4, "                         ");
-    drawDedLine(row5, " M   4   1337      T  1X ");
-  } while (u8g2.nextPage());
-}
-/**
- * @brief prints test Steerpoint Page of the DED
- */
-void stptPage()
-{
-  u8g2.firstPage();
-  do
-  {
-    drawDedLine(row1, "      STPT *  1*a MAN    "); // * == HL, a == up/dwn
-    drawDedLine(row2, "   LAT  N 43o03.400'     "); // o == degrees
-    drawDedLine(row3, "   LNG  E040o59.713'     "); // o == degrees
-    drawDedLine(row4, "  ELEV    5000FT         ");
-    drawDedLine(row5, "   TOS  11:47:39         ");
-  } while (u8g2.nextPage());
-}
-/**
- * @brief prints test List Page of the DED
- */
-void listPage()
-{
-  u8g2.firstPage();
-  do
-  {
-    // pulled from dcs-bios lua env. ex: `return hub.getSimString("F-16C_50/DED_LINE_3")`
-    drawDedLine(row1, "          LIST           ");
-    drawDedLine(row2, "1DEST 2BNGO 3VIP  RINTG  A\x10\x04"); // 1,2,3,R should be HL
-    drawDedLine(row3, "4NAV  5MAN  6INS  EDLNK  A\x10\x04");
-    drawDedLine(row4, "7CMDS 8MODE 9VRP  0MISC  A\x10\x04");
-    drawDedLine(row5, "                         ");
-  } while (u8g2.nextPage());
-}
-/**
- * @brief prints test com1 Page of the DED
- */
-void com1Page()
-{
-  u8g2.firstPage();
-  do
-  {
-    drawDedLine(row1, "     UHF     MAIN        ");
-    drawDedLine(row2, "  305.00                 ");
-    drawDedLine(row3, "             *305.00*    "); // asterics should be HL
-    drawDedLine(row4, "  PRE   1 a      TOD     ");
-    drawDedLine(row5, "     305.00       NB     ");
-  } while (u8g2.nextPage());
 }
 
 #ifdef DCSBIOS
@@ -261,20 +204,15 @@ void setup()
 {
 #ifdef DCSBIOS
   DcsBios::setup();
-#else
-  Serial.begin(9600);
-  u8g2.enableUTF8Print();
-  Serial.println("Setup start");
 #endif
+  Serial.begin(115200);
   u8g2.begin();
+  u8g2.enableUTF8Print();
   u8g2.setFont(DED_FONT); // https://github.com/olikraus/u8g2/wiki/fntgrpx11#8x13
   u8g2.setFontMode(1);    // https://github.com/olikraus/u8g2/wiki/u8g2reference#setfontmode
   u8g2.setDrawColor(1);   // https://github.com/olikraus/u8g2/wiki/u8g2reference#setdrawcolor
   splashScreen();
-  delay(10 * 1000); // pause X secs for our sponsor. :-)
-#ifndef DCSBIOS
-  Serial.println("Setup done");
-#endif
+  delay(1 * 1000); // pause X secs for our sponsor. :-)
 }
 
 /**
@@ -282,7 +220,6 @@ void setup()
  */
 void loop()
 {
-#ifdef DCSBIOS
   u8g2.firstPage();
   do
   {
@@ -292,15 +229,7 @@ void loop()
     drawDedLine(row4, line4);
     drawDedLine(row5, line5);
   } while (u8g2.nextPage());
+#ifdef DCSBIOS
   DcsBios::loop();
-#else
-  cniPage();
-  delay(3 * 1000);
-  com1Page();
-  delay(3 * 1000);
-  stptPage();
-  delay(3 * 1000);
-  listPage();
-  delay(3 * 1000);
 #endif
 }
