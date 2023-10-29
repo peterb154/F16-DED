@@ -51,24 +51,10 @@ char *line4 = (char *)"";
 char *line5 = (char *)"";
 
 // timers
+#ifdef CYCLES_PER_LOOP
 long lastMillis = 0;
 long loops = 0;
-
-/**
- * @brief Draw a highlighted character on the screen
- *
- * @param row the bottom pixel of the row on which the char exists
- * @param index the number of the char in the row to replace (starting from 1)
- * @param hChar the char that will be drawn in the highlighted cell
- */
-void highlightChar(uint8_t row, int index, char hChar)
-{
-  char hChars[2] = {hChar, '\0'};
-#ifdef DEBUG
-  Serial.println("HIGHLIGHT - row:" + String(row / rowHeight) + " index:" + String(index) + " char: " + hChars);
 #endif
-  u8g2.drawButtonUTF8(textWidth * index - textWidth, row, U8G2_BTN_INV, 0, 0, 0, hChars);
-}
 
 /**
  * @brief: Function to draw a line with characters replaced by UTF-8 symbols
@@ -102,11 +88,11 @@ void drawDedLine(uint8_t row, const char dedLine[])
     }
   }
   dedChars[DED_LINE_LEN - 1] = '\0'; // null terminate the dedChars array
+  u8g2.drawStr(0, row, dedChars);
 
 #ifdef DEBUG
   Serial.println("DRAW - row:" + String(row / rowHeight) + " '" + dedChars + "'");
 #endif
-  u8g2.drawStr(0, row, dedChars);
 
   // Highlight dedChars (first 25) based on ctrlChars (last 4)
   unsigned long bitMap;
@@ -115,7 +101,9 @@ void drawDedLine(uint8_t row, const char dedLine[])
   {
     if (bitRead(bitMap, i))
     {
-      highlightChar(row, i + 1, dedChars[i]);
+      char hChar[2] = {dedChars[i], '\0'};
+      // drawButtonUTF8() creates a solid box around a transparent char
+      u8g2.drawButtonUTF8(textWidth * (i + 1) - textWidth, row, U8G2_BTN_INV, 0, 0, 0, hChar);
     }
   }
 }
@@ -182,9 +170,6 @@ void splashScreen()
   u8g2.sendBuffer();
 }
 
-/**
- * @brief Setup loop, run once on boot
- */
 void setup()
 {
 #ifdef DCSBIOS
@@ -192,31 +177,28 @@ void setup()
 #endif
   Serial.begin(115200);
   u8g2.begin();
-  // u8g2.enableUTF8Print();
-  u8g2.setFont(DED_FONT); // https://github.com/olikraus/u8g2/wiki/fntgrpx11#8x13
-  u8g2.setFontMode(1);    // https://github.com/olikraus/u8g2/wiki/u8g2reference#setfontmode
-  u8g2.setDrawColor(1);   // https://github.com/olikraus/u8g2/wiki/u8g2reference#setdrawcolor
+  u8g2.setFont(DED_FONT);
+  u8g2.setFontMode(1);
+  u8g2.setDrawColor(1);
   splashScreen();
-  delay(3 * 1000); // pause X secs for our sponsor. :-)
+  delay(3 * 1000);
 }
 
-/**
- * @brief main loop
- */
 void loop()
 {
+#ifdef DCSBIOS
+  DcsBios::loop();
+#endif
+
   u8g2.clearBuffer();
   drawDedLine(row1, line1);
   drawDedLine(row2, line2);
   drawDedLine(row3, line3);
   drawDedLine(row4, line4);
   drawDedLine(row5, line5);
-#ifdef DCSBIOS
-  DcsBios::loop();
-#endif
   u8g2.sendBuffer();
+
 #ifdef CYCLES_PER_LOOP
-  // Print cycles per loop
   long currentMillis = millis();
   loops++;
 
