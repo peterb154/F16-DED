@@ -50,23 +50,9 @@ char *line3 = (char *)"";
 char *line4 = (char *)"";
 char *line5 = (char *)"";
 
-/**
- * @brief replace a char on the screen with a new one
- *
- * @param row the bottom pixel of the row on which the char exists
- * @param index the number of the char in the row to replace (starting from 1)
- * @param newGlyph the new char that will be drawn in that location
- */
-void replaceChar(uint8_t row, int index, uint16_t newGlyph)
-{
-  u8g2.setDrawColor(0);                                                  // color to blank
-  u8g2.drawBox(textWidth * index, row - textHeight, textWidth, row + 4); // create a box around the old char
-  u8g2.setDrawColor(1);                                                  // set the color back to on
-#ifndef DCSBIOS
-  Serial.println("REPLACED - row:" + String(row) + ", index:" + String(index) + " newGlyph:" + newGlyph);
-#endif
-  u8g2.drawGlyph(textWidth * index, row, newGlyph); // draw new utf-8 symbol
-}
+// timers
+long lastMillis = 0;
+long loops = 0;
 
 /**
  * @brief Draw a highlighted character on the screen
@@ -78,8 +64,8 @@ void replaceChar(uint8_t row, int index, uint16_t newGlyph)
 void highlightChar(uint8_t row, int index, char hChar)
 {
   char hChars[2] = {hChar, '\0'};
-#ifndef DCSBIOS
-  Serial.println("HIGHLIGHT - row:" + String(row) + " index:" + String(index) + " char: " + hChars);
+#ifdef DEBUG
+  Serial.println("HIGHLIGHT - row:" + String(row / rowHeight) + " index:" + String(index) + " char: " + hChars);
 #endif
   u8g2.drawButtonUTF8(textWidth * index - textWidth, row, U8G2_BTN_INV, 0, 0, 0, hChars);
 }
@@ -101,23 +87,26 @@ void drawDedLine(uint8_t row, const char dedLine[])
   char dedChars[DED_LINE_LEN];              // new char array that will contain only the string to be printed
   strncpy(dedChars, dedLine, DED_LINE_LEN); // pull the first 25 chars from dedLine into the dedChars var
   dedChars[DED_LINE_LEN - 1] = '\0';        // Null-terminate the string
-  u8g2.drawStr(0, row, dedChars);
 
   // Replace any matching characters with the corrected symbols
   for (int i = 0; i < DED_LINE_LEN; i++)
   {
     if (dedChars[i] == 'o')
     {
-      replaceChar(row, i, 0x00B0); // replace "o" with degree symbol
+      dedChars[i] = 0x00B0; // replace with ascii degree symbol
     }
     else if (dedChars[i] == 'a')
     {
-      replaceChar(row, i, 0x21D5); // replace "a" with up/down arrow symbol
+      dedChars[i] = 0x0020;                       // replace with ascii space, we'll fill in utf char below
+      u8g2.drawGlyph(textWidth * i, row, 0x21D5); // draw new utf-8 up/down arrow glyph in that spot
     }
   }
-#ifndef DCSBIOS
-  Serial.println("DRAW - row:" + String(row) + " '" + dedChars + "'");
+  dedChars[DED_LINE_LEN - 1] = '\0'; // null terminate the dedChars array
+
+#ifdef DEBUG
+  Serial.println("DRAW - row:" + String(row / rowHeight) + " '" + dedChars + "'");
 #endif
+  u8g2.drawStr(0, row, dedChars);
 
   // Highlight dedChars (first 25) based on ctrlChars (last 4)
   unsigned long bitMap;
@@ -183,18 +172,14 @@ DcsBios::StringBuffer<29> dedLine5Buffer(F_16C_50_DED_LINE_5_A, onDedLine5Change
  */
 void splashScreen()
 {
-#ifndef DCSBIOS
   Serial.println("SPLASH SCREEN");
-#endif
-  u8g2.firstPage();
-  do
-  {
-    u8g2.drawStr(0, row1, " _______________________ ");
-    u8g2.drawStr(0, row2, "|                       |");
-    u8g2.drawStr(0, row3, "|     DED BY SOCKEYE    |");
-    u8g2.drawStr(0, row4, "|     V303FG / 93FS     |");
-    u8g2.drawStr(0, row5, "|_______________________|");
-  } while (u8g2.nextPage());
+  u8g2.clearBuffer();
+  u8g2.drawStr(0, row1, " _______________________ ");
+  u8g2.drawStr(0, row2, "|                       |");
+  u8g2.drawStr(0, row3, "| WiFi DED BY SOCKEYE   |");
+  u8g2.drawStr(0, row4, "|     V303FG / 93FS     |");
+  u8g2.drawStr(0, row5, "|_______________________|");
+  u8g2.sendBuffer();
 }
 
 /**
@@ -207,12 +192,12 @@ void setup()
 #endif
   Serial.begin(115200);
   u8g2.begin();
-  u8g2.enableUTF8Print();
+  // u8g2.enableUTF8Print();
   u8g2.setFont(DED_FONT); // https://github.com/olikraus/u8g2/wiki/fntgrpx11#8x13
   u8g2.setFontMode(1);    // https://github.com/olikraus/u8g2/wiki/u8g2reference#setfontmode
   u8g2.setDrawColor(1);   // https://github.com/olikraus/u8g2/wiki/u8g2reference#setdrawcolor
   splashScreen();
-  delay(1 * 1000); // pause X secs for our sponsor. :-)
+  delay(3 * 1000); // pause X secs for our sponsor. :-)
 }
 
 /**
@@ -220,16 +205,28 @@ void setup()
  */
 void loop()
 {
-  u8g2.firstPage();
-  do
-  {
-    drawDedLine(row1, line1);
-    drawDedLine(row2, line2);
-    drawDedLine(row3, line3);
-    drawDedLine(row4, line4);
-    drawDedLine(row5, line5);
-  } while (u8g2.nextPage());
+  u8g2.clearBuffer();
+  drawDedLine(row1, line1);
+  drawDedLine(row2, line2);
+  drawDedLine(row3, line3);
+  drawDedLine(row4, line4);
+  drawDedLine(row5, line5);
 #ifdef DCSBIOS
   DcsBios::loop();
+#endif
+  u8g2.sendBuffer();
+#ifdef CYCLES_PER_LOOP
+  // Print cycles per loop
+  long currentMillis = millis();
+  loops++;
+
+  if (currentMillis - lastMillis > 1000)
+  {
+    Serial.print(loops);
+    Serial.println("Hz");
+
+    lastMillis = currentMillis;
+    loops = 0;
+  }
 #endif
 }
